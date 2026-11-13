@@ -77,6 +77,7 @@ def main():
     run('dotnet', patcher, 'patch', managed, shim, out)
     run('dotnet', 'build', os.path.join(ROOT, 'mod'), '-c', 'Release', '-nologo', '-v', 'q',
         f'-p:ManagedDir={managed}', f'-p:GameAsmDir={out}')
+    shutil.copyfile(shim, os.path.join(out, 'SdShim.dll'))
     shutil.copyfile(os.path.join(ROOT, 'mod', 'bin', 'Release', 'netstandard2.1', 'SdIOS.dll'), os.path.join(out, 'SdIOS.dll'))
 
     n = 0
