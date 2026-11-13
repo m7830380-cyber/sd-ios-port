@@ -53,7 +53,7 @@ public static class IosShellBuild
         PlayerSettings.statusBarHidden = true;
         PlayerSettings.iOS.appInBackgroundBehavior = iOSAppInBackgroundBehavior.Suspend;
         PlayerSettings.accelerometerFrequency = 0;
-        PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
+        PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
         PlayerSettings.allowedAutorotateToLandscapeLeft = true;
         PlayerSettings.allowedAutorotateToLandscapeRight = true;
         PlayerSettings.allowedAutorotateToPortrait = false;
@@ -96,6 +96,14 @@ public static class IosShellBuild
         root.SetBoolean("UIRequiresFullScreen", true);
         root.SetBoolean("UIStatusBarHidden", true);
         root.SetBoolean("ITSAppUsesNonExemptEncryption", false);
+
+        var orientations = root.CreateArray("UISupportedInterfaceOrientations");
+        orientations.AddString("UIInterfaceOrientationLandscapeRight");
+        orientations.AddString("UIInterfaceOrientationLandscapeLeft");
+
+        var ipadOrientations = root.CreateArray("UISupportedInterfaceOrientations~ipad");
+        ipadOrientations.AddString("UIInterfaceOrientationLandscapeRight");
+        ipadOrientations.AddString("UIInterfaceOrientationLandscapeLeft");
 
         var gcProfiles = root.CreateArray("GCSupportedGameControllers");
         gcProfiles.AddDict().SetString("ProfileName", "ExtendedGamepad");

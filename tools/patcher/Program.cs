@@ -79,6 +79,14 @@ static class Program
             {
                 n += NoComputeShaders(ctx);
             }
+            else if (asm.Name.Name == "Sirenix.Serialization")
+            {
+                n += PatchSirenixSerialization(ctx);
+            }
+            else if (asm.Name.Name == "Sirenix.Utilities")
+            {
+                n += PatchSirenixUtilities(ctx);
+            }
 
             string outPath = Path.Combine(outDir, name);
             asm.Write(outPath);
@@ -465,5 +473,193 @@ static class Program
             }
         }
         return count;
+    }
+
+    static MethodReference FindUnityObjectOpEquality(Ctx c)
+    {
+        var opEq = c.Mod.GetMemberReferences()
+            .OfType<MethodReference>()
+            .FirstOrDefault(m => m.DeclaringType.FullName == "UnityEngine.Object" && m.Name == "op_Equality");
+
+        if (opEq != null) return opEq;
+
+        foreach (var (m, ins) in Calls(c.Mod))
+        {
+            if (ins.Operand is MethodReference mr && mr.DeclaringType.FullName == "UnityEngine.Object" && mr.Name == "op_Equality")
+                return mr;
+        }
+        return null;
+    }
+
+    static int PatchUnityExtensions(Ctx c, string typeName)
+    {
+        var unityExt = c.Mod.GetType(typeName);
+        if (unityExt == null) return 0;
+
+        int count = 0;
+        var cctor = unityExt.Methods.FirstOrDefault(m => m.Name == ".cctor");
+        if (cctor != null)
+        {
+            cctor.Body = new MethodBody(cctor);
+            cctor.Body.GetILProcessor().Emit(OpCodes.Ret);
+            count++;
+        }
+
+        var safeNull = unityExt.Methods.FirstOrDefault(m => m.Name == "SafeIsUnityNull");
+        if (safeNull != null)
+        {
+            var opEq = FindUnityObjectOpEquality(c);
+            if (opEq != null)
+            {
+                safeNull.Body = new MethodBody(safeNull);
+                var il = safeNull.Body.GetILProcessor();
+                il.Emit(OpCodes.Ldarg_0);
+                il.Emit(OpCodes.Ldnull);
+                il.Emit(OpCodes.Call, opEq);
+                il.Emit(OpCodes.Ret);
+                count++;
+            }
+            else
+            {
+                c.Fail($"Could not find UnityEngine.Object::op_Equality reference for {typeName}.SafeIsUnityNull");
+            }
+        }
+
+        return count;
+    }
+
+    static int PatchSirenixSerialization(Ctx c)
+    {
+        int count = 0;
+
+        // 1. EmitUtilities.get_CanEmit -> false
+        var emitUtils = c.Mod.GetType("Sirenix.Serialization.Utilities.EmitUtilities");
+        var getCanEmit = emitUtils?.Methods.FirstOrDefault(m => m.Name == "get_CanEmit");
+        if (getCanEmit != null)
+        {
+            getCanEmit.Body = new MethodBody(getCanEmit);
+            var il = getCanEmit.Body.GetILProcessor();
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ret);
+            count++;
+        }
+        else
+        {
+            c.Fail("Sirenix.Serialization.Utilities.EmitUtilities.get_CanEmit not found");
+        }
+
+        // 2. FormatterEmitter.GetEmittedFormatter -> return null
+        var formatterEmitter = c.Mod.GetType("Sirenix.Serialization.FormatterEmitter");
+        var getEmitted = formatterEmitter?.Methods.FirstOrDefault(m => m.Name == "GetEmittedFormatter");
+        if (getEmitted != null)
+        {
+            getEmitted.Body = new MethodBody(getEmitted);
+            var il = getEmitted.Body.GetILProcessor();
+            il.Emit(OpCodes.Ldnull);
+            il.Emit(OpCodes.Ret);
+            count++;
+        }
+
+        // 3. UnitySerializationUtility.GetCachedUnityMemberSetter / Getter -> branch to fallback reflection delegate
+        var unitySerUtil = c.Mod.GetType("Sirenix.Serialization.UnitySerializationUtility");
+        if (unitySerUtil != null)
+        {
+            count += BypassEmitToReflectionFallback(c, unitySerUtil.Methods.FirstOrDefault(m => m.Name == "GetCachedUnityMemberSetter"));
+            count += BypassEmitToReflectionFallback(c, unitySerUtil.Methods.FirstOrDefault(m => m.Name == "GetCachedUnityMemberGetter"));
+        }
+        else
+        {
+            c.Fail("Sirenix.Serialization.UnitySerializationUtility not found");
+        }
+
+        // 4. BaseFormatter<T>.CreateCallback -> return null
+        foreach (var t in c.Mod.GetTypes())
+        {
+            if (t.Name.StartsWith("BaseFormatter`1"))
+            {
+                var cbMethod = t.Methods.FirstOrDefault(m => m.Name == "CreateCallback");
+                if (cbMethod != null)
+                {
+                    cbMethod.Body = new MethodBody(cbMethod);
+                    var il = cbMethod.Body.GetILProcessor();
+                    il.Emit(OpCodes.Ldnull);
+                    il.Emit(OpCodes.Ret);
+                    count++;
+                }
+            }
+        }
+
+        // 5. UnityExtensions (.cctor and SafeIsUnityNull)
+        count += PatchUnityExtensions(c, "Sirenix.Serialization.Utilities.UnityExtensions");
+
+        return count;
+    }
+
+    static int PatchSirenixUtilities(Ctx c)
+    {
+        int count = 0;
+
+        // 1. EmitUtilities.get_CanEmit -> false
+        var emitUtils = c.Mod.GetType("Sirenix.Utilities.EmitUtilities");
+        var getCanEmit = emitUtils?.Methods.FirstOrDefault(m => m.Name == "get_CanEmit");
+        if (getCanEmit != null)
+        {
+            getCanEmit.Body = new MethodBody(getCanEmit);
+            var il = getCanEmit.Body.GetILProcessor();
+            il.Emit(OpCodes.Ldc_I4_0);
+            il.Emit(OpCodes.Ret);
+            count++;
+        }
+        else
+        {
+            c.Fail("Sirenix.Utilities.EmitUtilities.get_CanEmit not found");
+        }
+
+        // 2. UnityExtensions (.cctor and SafeIsUnityNull)
+        count += PatchUnityExtensions(c, "Sirenix.Utilities.UnityExtensions");
+
+        return count;
+    }
+
+    static int BypassEmitToReflectionFallback(Ctx c, MethodDefinition method)
+    {
+        if (method == null || !method.HasBody)
+        {
+            c.Fail("Method missing or has no body in BypassEmitToReflectionFallback");
+            return 0;
+        }
+
+        Instruction prevToLdftn = null;
+        for (int i = 1; i < method.Body.Instructions.Count; i++)
+        {
+            if (method.Body.Instructions[i].OpCode == OpCodes.Ldftn)
+            {
+                prevToLdftn = method.Body.Instructions[i - 1];
+                break;
+            }
+        }
+
+        Instruction branchAfterTryGet = null;
+        for (int i = 0; i < method.Body.Instructions.Count - 1; i++)
+        {
+            var ins = method.Body.Instructions[i];
+            if (ins.Operand is MethodReference mr && mr.Name == "TryGetValue")
+            {
+                branchAfterTryGet = method.Body.Instructions[i + 1];
+                break;
+            }
+        }
+
+        if (branchAfterTryGet == null || prevToLdftn == null)
+        {
+            c.Fail($"Could not locate patch points in {method.Name}");
+            return 0;
+        }
+
+        int branchIdx = method.Body.Instructions.IndexOf(branchAfterTryGet);
+        var targetIns = method.Body.Instructions[branchIdx + 1];
+        targetIns.OpCode = OpCodes.Br;
+        targetIns.Operand = prevToLdftn;
+        return 1;
     }
 }

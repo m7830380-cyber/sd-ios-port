@@ -34,6 +34,11 @@ namespace SdIOS
                 Input.simulateMouseWithTouches = false;
                 Input.multiTouchEnabled = true;
                 Screen.sleepTimeout = SleepTimeout.NeverSleep;
+                Screen.orientation = ScreenOrientation.LandscapeLeft;
+                Screen.autorotateToLandscapeLeft = true;
+                Screen.autorotateToLandscapeRight = true;
+                Screen.autorotateToPortrait = false;
+                Screen.autorotateToPortraitUpsideDown = false;
                 Platform.ApplyFrameRate();
 
                 var go = new GameObject("SD-iOS");
