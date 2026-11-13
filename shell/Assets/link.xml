@@ -1,0 +1,88 @@
+<linker>
+  <!-- Stranded Deep retail assemblies (patched) and iOS mod: preserve everything -->
+  <assembly fullname="Assembly-CSharp" preserve="all"/>
+  <assembly fullname="Assembly-CSharp-firstpass" preserve="all"/>
+  <assembly fullname="bolt" preserve="all"/>
+  <assembly fullname="bolt.user" preserve="all"/>
+  <assembly fullname="ch.sycoforge.Decal" preserve="all"/>
+  <assembly fullname="com.rlabrecque.steamworks.net" preserve="all"/>
+  <assembly fullname="GdkUtilities" preserve="all"/>
+  <assembly fullname="Newtonsoft.Json" preserve="all"/>
+  <assembly fullname="Photon3Unity3D" preserve="all"/>
+  <assembly fullname="PhotonBolt" preserve="all"/>
+  <assembly fullname="PhotonRealtime" preserve="all"/>
+  <assembly fullname="Rewired_Core" preserve="all"/>
+  <assembly fullname="Rewired_Windows" preserve="all"/>
+  <assembly fullname="Rewired_Windows_Functions" preserve="all"/>
+  <assembly fullname="SdIOS" preserve="all"/>
+  <assembly fullname="SdShim" preserve="all"/>
+  <assembly fullname="Sirenix.OdinInspector.Attributes" preserve="all"/>
+  <assembly fullname="Sirenix.OdinInspector.CompatibilityLayer" preserve="all"/>
+  <assembly fullname="Sirenix.Serialization" preserve="all"/>
+  <assembly fullname="Sirenix.Serialization.Config" preserve="all"/>
+  <assembly fullname="Sirenix.Utilities" preserve="all"/>
+  <assembly fullname="udpkit.common" preserve="all"/>
+  <assembly fullname="udpkit" preserve="all"/>
+  <assembly fullname="udpkit.platform.dotnet" preserve="all"/>
+  <assembly fullname="udpkit.platform.null" preserve="all"/>
+  <assembly fullname="udpkit.platform.photon" preserve="all"/>
+  <assembly fullname="Unity.Postprocessing.Runtime" preserve="all"/>
+  <assembly fullname="Unity.TextMeshPro" preserve="all"/>
+  <assembly fullname="Unity.Timeline" preserve="all"/>
+  <assembly fullname="UnityEngine.UI" preserve="all"/>
+  <assembly fullname="websocket-sharp" preserve="all"/>
+  <assembly fullname="XGamingRuntime" preserve="all"/>
+
+  <!-- Unity Engine Modules required for scene and prefab deserialization -->
+  <assembly fullname="UnityEngine.AIModule" preserve="all"/>
+  <assembly fullname="UnityEngine.AndroidJNIModule" preserve="all"/>
+  <assembly fullname="UnityEngine.AnimationModule" preserve="all"/>
+  <assembly fullname="UnityEngine.AssetBundleModule" preserve="all"/>
+  <assembly fullname="UnityEngine.AudioModule" preserve="all"/>
+  <assembly fullname="UnityEngine.ClothModule" preserve="all"/>
+  <assembly fullname="UnityEngine.CoreModule" preserve="all"/>
+  <assembly fullname="UnityEngine.DirectorModule" preserve="all"/>
+  <assembly fullname="UnityEngine.GridModule" preserve="all"/>
+  <assembly fullname="UnityEngine.IMGUIModule" preserve="all"/>
+  <assembly fullname="UnityEngine.ImageConversionModule" preserve="all"/>
+  <assembly fullname="UnityEngine.InputModule" preserve="all"/>
+  <assembly fullname="UnityEngine.InputLegacyModule" preserve="all"/>
+  <assembly fullname="UnityEngine.JSONSerializeModule" preserve="all"/>
+  <assembly fullname="UnityEngine.ParticleSystemModule" preserve="all"/>
+  <assembly fullname="UnityEngine.Physics2DModule" preserve="all"/>
+  <assembly fullname="UnityEngine.PhysicsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.ScreenCaptureModule" preserve="all"/>
+  <assembly fullname="UnityEngine.SharedInternalsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.SpriteMaskModule" preserve="all"/>
+  <assembly fullname="UnityEngine.SpriteShapeModule" preserve="all"/>
+  <assembly fullname="UnityEngine.SubsystemsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TerrainModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TerrainPhysicsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TextCoreFontEngineModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TextCoreTextEngineModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TextRenderingModule" preserve="all"/>
+  <assembly fullname="UnityEngine.TilemapModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UIElementsModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UIModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UmbraModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UnityWebRequestAssetBundleModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UnityWebRequestAudioModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UnityWebRequestModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UnityWebRequestTextureModule" preserve="all"/>
+  <assembly fullname="UnityEngine.UnityWebRequestWWWModule" preserve="all"/>
+  <assembly fullname="UnityEngine.VehiclesModule" preserve="all"/>
+  <assembly fullname="UnityEngine.VideoModule" preserve="all"/>
+  <assembly fullname="UnityEngine.WindModule" preserve="all"/>
+  <assembly fullname="UnityEngine" preserve="all"/>
+
+  <!-- Reflection serialization -->
+  <assembly fullname="mscorlib">
+    <namespace fullname="System.Runtime.Serialization" preserve="all"/>
+    <namespace fullname="System.Collections.Generic" preserve="all"/>
+    <namespace fullname="System.Reflection" preserve="all"/>
+  </assembly>
+  <assembly fullname="System">
+    <namespace fullname="System.ComponentModel" preserve="all"/>
+  </assembly>
+  <assembly fullname="System.Runtime.Serialization" preserve="all"/>
+</linker>
