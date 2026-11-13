@@ -58,14 +58,15 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: /Applications/Unity
-          key: unity-${{ env.UNITY_VERSION }}-ios-arm64-v1
+          key: unity-${{ env.UNITY_VERSION }}-ios-x86_64-v1
 
       - name: Install Unity ${{ env.UNITY_VERSION }}
         if: steps.unity-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
+          softwareupdate --install-rosetta --agree-to-license || true
           BASE=https://download.unity3d.com/download_unity/$UNITY_REVISION
-          curl -fsSL --retry 3 -o /tmp/editor.pkg "$BASE/MacEditorInstallerArm64/Unity-$UNITY_VERSION.pkg" &
+          curl -fsSL --retry 3 -o /tmp/editor.pkg "$BASE/MacEditorInstaller/Unity-$UNITY_VERSION.pkg" &
           curl -fsSL --retry 3 -o /tmp/ios.pkg "$BASE/MacEditorTargetInstaller/UnitySetup-iOS-Support-for-Editor-$UNITY_VERSION.pkg" &
           wait
           ls -l /tmp/*.pkg
@@ -80,7 +81,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /Applications/Unity
-          key: unity-${{ env.UNITY_VERSION }}-ios-arm64-v1
+          key: unity-${{ env.UNITY_VERSION }}-ios-x86_64-v1
 
       - name: Check Unity
         run: |

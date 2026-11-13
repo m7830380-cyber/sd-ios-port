@@ -3,7 +3,7 @@
 LOG="$1"; LIMIT="$2"; DONE="$3"; shift 3
 UNITY=/Applications/Unity/Unity.app/Contents/MacOS/Unity
 rm -f "$LOG"; touch "$LOG"
-"$UNITY" -batchmode -nographics -logFile "$LOG" "$@" &
+arch -x86_64 "$UNITY" -batchmode -nographics -disable-assembly-updater -logFile "$LOG" "$@" &
 PID=$!
 tail -n +1 -f "$LOG" > >(grep --line-buffered -iE "licens|error|exception|build|\[SD|\[IosShell|IL2CPP|compil|exiting" | cut -c1-300) &
 TAILPID=$!
