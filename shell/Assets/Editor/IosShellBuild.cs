@@ -36,7 +36,6 @@ public static class IosShellBuild
         PlayerSettings.SetManagedStrippingLevel(BuildTargetGroup.iOS, ManagedStrippingLevel.Minimal);
         PlayerSettings.stripEngineCode = false;
         PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.iOS, Il2CppCompilerConfiguration.Release);
-        PlayerSettings.SetIl2CppCodeGeneration(NamedBuildTarget.iOS, Il2CppCodeGeneration.OptimizeSpeed);
         PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.iOS, ApiCompatibilityLevel.NET_4_6);
         PlayerSettings.allowUnsafeCode = true;
         PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
