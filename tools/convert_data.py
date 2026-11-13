@@ -165,11 +165,23 @@ def process_player_file(src, dst, cache_dir, work_dir, pool):
             for i in range(0, len(stream_objs), CHUNK):
                 batch = stream_objs[i:i + CHUNK]
                 jobs = []
+                job_indices = []
                 for idx, (obj, tt) in enumerate(batch):
                     sd = tt['m_StreamData']
                     fin.seek(sd['offset'])
                     raw = fin.read(sd['size'])
+                    if tt.get('m_TextureFormat') not in tex.CONVERTIBLE:
+                        # Non-BC texture (e.g. RGBA32, RGB24) natively supported - stream as-is
+                        new_off = fout.tell()
+                        fout.write(raw)
+                        pad = (-len(raw)) % 16
+                        if pad:
+                            fout.write(b'\0' * pad)
+                        tt['m_StreamData']['offset'] = new_off
+                        obj.save_typetree(tt)
+                        continue
                     jobs.append((idx, tt['m_TextureFormat'], tt['m_Width'], tt['m_Height'], tt.get('m_MipCount', 1), tt.get('m_ImageCount', 1), raw))
+                    job_indices.append(idx)
                 for idx, res, err in pool.map(_tex_job, jobs):
                     obj, tt = batch[idx]
                     if err:
