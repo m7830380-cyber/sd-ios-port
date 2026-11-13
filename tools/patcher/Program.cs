@@ -161,9 +161,16 @@ static class Program
                     il.Emit(OpCodes.Ldc_R8, 0.0);
                     il.Emit(OpCodes.Ret);
                 }
-                else if (ret.MetadataType == MetadataType.IntPtr || ret.MetadataType == MetadataType.UIntPtr)
+                else if (ret.MetadataType == MetadataType.IntPtr)
                 {
-                    il.Emit(OpCodes.Ldsfld, c.Mod.ImportReference(typeof(IntPtr).GetField("Zero")));
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Conv_I);
+                    il.Emit(OpCodes.Ret);
+                }
+                else if (ret.MetadataType == MetadataType.UIntPtr)
+                {
+                    il.Emit(OpCodes.Ldc_I4_0);
+                    il.Emit(OpCodes.Conv_U);
                     il.Emit(OpCodes.Ret);
                 }
                 else if (ret.IsValueType)
