@@ -24,7 +24,7 @@ env:
 
 jobs:
   shell:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
@@ -46,9 +46,10 @@ jobs:
 
       - name: Select Xcode
         run: |
-          ls -d /Applications/Xcode_*.app
+          ls -d /Applications/Xcode*.app || true
           X=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1)
-          [ -n "$X" ] || X=$(ls -d /Applications/Xcode_15*.app | sort -V | tail -n 1)
+          [ -n "$X" ] || X=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | tail -n 1)
+          [ -n "$X" ] || X=$(ls -d /Applications/Xcode*.app 2>/dev/null | head -n 1)
           sudo xcode-select -s "$X"
           xcodebuild -version
 
