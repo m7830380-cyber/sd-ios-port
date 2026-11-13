@@ -110,7 +110,9 @@ def _mesh_repoint(obj, path, old_off, size, new_off):
 
 
 def stamp(sf):
+    sf._m_target_platform = IOS_PLATFORM
     sf.target_platform = IOS_PLATFORM
+    sf.unity_version = TARGET_UNITY
     sf.version = TARGET_UNITY
 
 
