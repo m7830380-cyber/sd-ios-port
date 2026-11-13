@@ -125,10 +125,12 @@ static class Program
             foreach (var m in t.Methods.ToList())
             {
                 if (!m.IsPInvokeImpl) continue;
+                var _ = m.PInvokeInfo;
+                m.PInvokeInfo = null;
                 m.IsPInvokeImpl = false;
+                m.Attributes &= ~MethodAttributes.PInvokeImpl;
                 m.ImplAttributes &= ~MethodImplAttributes.PreserveSig;
                 m.ImplAttributes |= MethodImplAttributes.IL;
-                m.PInvokeInfo = null;
 
                 m.Body = new MethodBody(m);
                 var il = m.Body.GetILProcessor();
