@@ -407,6 +407,7 @@ def convert_shader(tt, blob, workdir, log=print):
                     ne.update(tt_params(cbs, binds, N))
                     ne['m_BlobIndex'] = mi
                     ne['m_GpuProgramType'] = METAL_VS if e['m_GpuProgramType'] in DX_VS else METAL_FS
+                    ne['m_ShaderRequirements'] = 33
                     ne['m_Channels'] = dict(m_Channels=[dict(source=s, target=t) for s, t in ch], m_SourceMap=smap)
                     for tier in METAL_TIERS:
                         te = dict(ne)

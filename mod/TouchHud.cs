@@ -33,6 +33,7 @@ namespace SdIOS
         Button m_BtnCrouch;
         Button m_BtnDrop;
         Button m_BtnPause;
+        Button m_BtnEnter;
 
         // Joystick state
         int m_StickFinger = -1;
@@ -67,6 +68,7 @@ namespace SdIOS
             m_BtnCrouch = new Button { Label = "CROUCH", Key = KeyCode.LeftControl };
             m_BtnDrop = new Button { Label = "DROP", Key = KeyCode.Q };
             m_BtnPause = new Button { Label = "ESC", Key = KeyCode.Escape };
+            m_BtnEnter = new Button { Label = "ENTER", Key = KeyCode.Return };
 
             m_Buttons.Add(m_BtnAttack);
             m_Buttons.Add(m_BtnAim);
@@ -78,6 +80,7 @@ namespace SdIOS
             m_Buttons.Add(m_BtnCrouch);
             m_Buttons.Add(m_BtnDrop);
             m_Buttons.Add(m_BtnPause);
+            m_Buttons.Add(m_BtnEnter);
         }
 
         void LayoutButtons()
@@ -124,15 +127,32 @@ namespace SdIOS
             m_BtnWatch.Pos = new Vector2(safeLeft + r * 1.2f, h * 0.15f);
             m_BtnWatch.Radius = r * 0.95f;
 
-            // Top pause button
+            // Top buttons (Pause & Enter)
             m_BtnPause.Pos = new Vector2(safeLeft + r * 1.2f, h * 0.05f + r);
             m_BtnPause.Radius = r * 0.85f;
+
+            m_BtnEnter.Pos = new Vector2(safeLeft + r * 3.4f, h * 0.05f + r);
+            m_BtnEnter.Radius = r * 0.85f;
         }
 
         void Update()
         {
             VInput.BeginFrame();
             LayoutButtons();
+
+            // In Scene 0 (intro logos & 'Press RETURN' screen), any tap MUST pulse Return + Space
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex == 0)
+            {
+                for (int i = 0; i < Input.touchCount; i++)
+                {
+                    if (Input.GetTouch(i).phase == TouchPhase.Began)
+                    {
+                        VInput.TapKey(KeyCode.Return, 3);
+                        VInput.TapKey(KeyCode.Space, 3);
+                        VInput.TapKey(KeyCode.KeypadEnter, 3);
+                    }
+                }
+            }
 
             bool inMenu = (IosCursor.LockState == CursorLockMode.None) || IosCursor.Visible;
 
@@ -269,11 +289,18 @@ namespace SdIOS
                 Touch t = Input.GetTouch(i);
                 Vector2 p = t.position;
 
-                if (t.phase == TouchPhase.Began && m_MenuFinger < 0)
+                if (t.phase == TouchPhase.Began)
                 {
-                    m_MenuFinger = t.fingerId;
-                    VirtualInput.MousePosition = p;
-                    VInput.SetMouseButton(0, true);
+                    VInput.TapKey(KeyCode.Return, 3);
+                    VInput.TapKey(KeyCode.Space, 3);
+                    VInput.TapKey(KeyCode.KeypadEnter, 3);
+
+                    if (m_MenuFinger < 0)
+                    {
+                        m_MenuFinger = t.fingerId;
+                        VirtualInput.MousePosition = p;
+                        VInput.SetMouseButton(0, true);
+                    }
                 }
                 else if (t.fingerId == m_MenuFinger)
                 {
