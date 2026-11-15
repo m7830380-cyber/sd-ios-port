@@ -513,8 +513,10 @@ static class Program
         // 4. MainMenuPresenter: CheckOnlineAvailable -> always invoke onAvailable
         var mainPresenter = c.Mod.GetType("Beam.UI.MainMenuPresenter");
         var checkOnline = mainPresenter?.Methods.FirstOrDefault(m => m.Name == "CheckOnlineAvailable");
-        if (checkOnline != null)
+        if (checkOnline != null && checkOnline.Parameters.Count > 0)
         {
+            var actionType = checkOnline.Parameters[0].ParameterType;
+            var actionInvoke = new MethodReference("Invoke", c.Mod.TypeSystem.Void, actionType) { HasThis = true };
             var ilCheck = checkOnline.Body.GetILProcessor();
             checkOnline.Body.Instructions.Clear();
             checkOnline.Body.Variables.Clear();
@@ -523,7 +525,6 @@ static class Program
             ilCheck.Append(ilCheck.Create(OpCodes.Ldarg_1)); // onAvailable
             ilCheck.Append(ilCheck.Create(OpCodes.Brfalse_S, retInst));
             ilCheck.Append(ilCheck.Create(OpCodes.Ldarg_1));
-            var actionInvoke = c.Mod.ImportReference(typeof(Action).GetMethod("Invoke"));
             ilCheck.Append(ilCheck.Create(OpCodes.Callvirt, actionInvoke));
             ilCheck.Append(retInst);
             patched++;
