@@ -30,7 +30,7 @@ SEM_SRC = {'POSITION': 0, 'NORMAL': 1, 'TANGENT': 2, 'COLOR': 3, 'BLENDWEIGHTS':
 
 def metal_code(msl):
     name = b'xlatMtlMain\0'
-    hdr = struct.pack('<IIIIIIIIIiiI', 0xF00DCAFE, 48, 6, 48 + len(name), 0, 0, 0, 0, 0, 37, -1, 0)
+    hdr = struct.pack('<IIIIIIIIIiiI', 0xF00DCAFE, 48, 5, 48 + len(name), 0, 0, 0, 0, 0, 5, -1, 0)
     return hdr + name + msl
 
 
