@@ -656,10 +656,14 @@ static class Program
             return 0;
         }
 
-        int branchIdx = method.Body.Instructions.IndexOf(branchAfterTryGet);
-        var targetIns = method.Body.Instructions[branchIdx + 1];
-        targetIns.OpCode = OpCodes.Br;
-        targetIns.Operand = prevToLdftn;
+        int startIdx = method.Body.Instructions.IndexOf(branchAfterTryGet) + 1;
+        int endIdx = method.Body.Instructions.IndexOf(prevToLdftn);
+
+        var il = method.Body.GetILProcessor();
+        for (int i = endIdx - 1; i >= startIdx; i--)
+        {
+            il.Remove(method.Body.Instructions[i]);
+        }
         return 1;
     }
 }
