@@ -88,6 +88,10 @@ static class Program
             {
                 n += PatchSirenixUtilities(ctx);
             }
+            else if (asm.Name.Name == "udpkit.platform.dotnet")
+            {
+                n += PatchUdpKitDotNet(ctx);
+            }
 
             string outPath = Path.Combine(outDir, name);
             asm.Write(outPath);
@@ -462,6 +466,7 @@ static class Program
                     var dotNetPlatformType = new TypeReference("UdpKit.Platform", "DotNetPlatform", c.Mod, new AssemblyNameReference("udpkit.platform.dotnet", new Version(0, 0, 0, 0)));
                     var dotNetCtor = new MethodReference(".ctor", c.Mod.TypeSystem.Void, dotNetPlatformType) { HasThis = true };
                     var dotNetCtorImported = c.Mod.ImportReference(dotNetCtor);
+                    var udpPlatformType = c.Mod.ImportReference(new TypeReference("UdpKit.Platform", "UdpPlatform", c.Mod, new AssemblyNameReference("udpkit", new Version(0, 0, 0, 0))));
 
                     var cur = startInst;
                     while (cur != setUdpInst)
@@ -472,9 +477,11 @@ static class Program
                     }
 
                     var newInst = il.Create(OpCodes.Newobj, dotNetCtorImported);
+                    var castInst = il.Create(OpCodes.Castclass, udpPlatformType);
                     il.Replace(setUdpInst, newInst);
+                    il.InsertAfter(newInst, castInst);
                     var callSet = il.Create(OpCodes.Call, setUdpInst.Operand as MethodReference);
-                    il.InsertAfter(newInst, callSet);
+                    il.InsertAfter(castInst, callSet);
                     patched++;
                 }
             }
@@ -531,6 +538,17 @@ static class Program
         }
 
         return patched;
+    }
+
+    static int PatchUdpKitDotNet(Ctx c)
+    {
+        var t = c.Mod.GetType("UdpKit.Platform.DotNetPlatform");
+        if (t != null)
+        {
+            t.IsPublic = true;
+            return 1;
+        }
+        return 0;
     }
 
     static int PatchFilePath(Ctx c)
