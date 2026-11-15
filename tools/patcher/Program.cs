@@ -463,10 +463,18 @@ static class Program
 
                 if (startInst != null && setUdpInst != null)
                 {
-                    var dotNetPlatformType = new TypeReference("UdpKit.Platform", "DotNetPlatform", c.Mod, new AssemblyNameReference("udpkit.platform.dotnet", new Version(0, 0, 0, 0)));
+                    var setUdpMethod = (MethodReference)setUdpInst.Operand;
+                    var udpPlatformType = setUdpMethod.Parameters[0].ParameterType;
+
+                    var dotnetRef = c.Mod.AssemblyReferences.FirstOrDefault(r => r.Name == "udpkit.platform.dotnet");
+                    if (dotnetRef == null)
+                    {
+                        dotnetRef = new AssemblyNameReference("udpkit.platform.dotnet", new Version(1, 0, 0, 26747));
+                        c.Mod.AssemblyReferences.Add(dotnetRef);
+                    }
+                    var dotNetPlatformType = new TypeReference("UdpKit.Platform", "DotNetPlatform", c.Mod, dotnetRef);
                     var dotNetCtor = new MethodReference(".ctor", c.Mod.TypeSystem.Void, dotNetPlatformType) { HasThis = true };
                     var dotNetCtorImported = c.Mod.ImportReference(dotNetCtor);
-                    var udpPlatformType = c.Mod.ImportReference(new TypeReference("UdpKit.Platform", "UdpPlatform", c.Mod, new AssemblyNameReference("udpkit", new Version(0, 0, 0, 0))));
 
                     var cur = startInst;
                     while (cur != setUdpInst)
@@ -480,7 +488,7 @@ static class Program
                     var castInst = il.Create(OpCodes.Castclass, udpPlatformType);
                     il.Replace(setUdpInst, newInst);
                     il.InsertAfter(newInst, castInst);
-                    var callSet = il.Create(OpCodes.Call, setUdpInst.Operand as MethodReference);
+                    var callSet = il.Create(OpCodes.Call, setUdpMethod);
                     il.InsertAfter(castInst, callSet);
                     patched++;
                 }
@@ -490,9 +498,12 @@ static class Program
             var boltStartDone = mm.Methods.FirstOrDefault(m => m.Name == "BoltStartDone");
             if (boltStartDone != null && boltStartDone.Body.Instructions.Count > 0)
             {
-                var boltNetworkType = new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, new AssemblyNameReference("bolt", new Version(0, 0, 0, 0)));
+                var boltRef = c.Mod.AssemblyReferences.FirstOrDefault(r => r.Name == "bolt")
+                              ?? new AssemblyNameReference("bolt", new Version(1, 3, 1, 0));
+                var boltNetworkType = c.Mod.GetTypeReferences().FirstOrDefault(tr => tr.FullName == "Photon.Bolt.BoltNetwork")
+                                      ?? new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, boltRef);
                 var enableLan = new MethodReference("EnableLanBroadcast", c.Mod.TypeSystem.Void, boltNetworkType);
-                enableLan.Parameters.Add(new ParameterDefinition(c.Mod.TypeSystem.Int32));
+                enableLan.Parameters.Add(new ParameterDefinition(c.Mod.TypeSystem.UInt16));
                 var enableLanImported = c.Mod.ImportReference(enableLan);
 
                 var ilDone = boltStartDone.Body.GetILProcessor();
@@ -506,7 +517,10 @@ static class Program
             var boltShutdown = mm.Methods.FirstOrDefault(m => m.Name == "BoltShutdownBegin");
             if (boltShutdown != null && boltShutdown.Body.Instructions.Count > 0)
             {
-                var boltNetworkType = new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, new AssemblyNameReference("bolt", new Version(0, 0, 0, 0)));
+                var boltRef = c.Mod.AssemblyReferences.FirstOrDefault(r => r.Name == "bolt")
+                              ?? new AssemblyNameReference("bolt", new Version(1, 3, 1, 0));
+                var boltNetworkType = c.Mod.GetTypeReferences().FirstOrDefault(tr => tr.FullName == "Photon.Bolt.BoltNetwork")
+                                      ?? new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, boltRef);
                 var disableLan = new MethodReference("DisableLanBroadcast", c.Mod.TypeSystem.Void, boltNetworkType);
                 var disableLanImported = c.Mod.ImportReference(disableLan);
 
