@@ -92,7 +92,9 @@ def main():
                 for f in files:
                     p = os.path.join(root, f)
                     arc = os.path.relpath(p, stage).replace('\\', '/')
-                    z.write(p, arc, compress_type=zipfile.ZIP_DEFLATED)
+                    ext = os.path.splitext(f)[1].lower()
+                    cmpr = zipfile.ZIP_STORED if ext in STORE_EXT else zipfile.ZIP_DEFLATED
+                    z.write(p, arc, compress_type=cmpr)
         print('wrote', out, os.path.getsize(out) >> 20, 'MB')
     finally:
         shutil.rmtree(stage, ignore_errors=True)

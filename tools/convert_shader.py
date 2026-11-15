@@ -152,7 +152,8 @@ def build_metal_params(refl, msl, P, cbname_map):
     for r in refl['refl']:
         k = r['k']
         if k == 'cb':
-            cur = dict(name=r['name'], size=0, params=[], structs=[])
+            cb_name = cbname_map.get(r['name'], r['name'])
+            cur = dict(name=cb_name, size=0, params=[], structs=[])
             cbs.append(cur)
             off = 0
         elif k == 'const':
@@ -161,7 +162,13 @@ def build_metal_params(refl, msl, P, cbname_map):
             off = (off + align - 1) // align * align
             ocb = cbname_map.get(cur['name'], cur['name'])
             ov = orig_vars.get((ocb, r['name']))
-            if ov is None: raise ConvertError(f'unknown const {ocb}.{r["name"]}')
+            if ov is None:
+                ov = orig_vars.get((r['name'], r['name']))
+            if ov is None:
+                ov = next((v for (c, n), v in orig_vars.items() if n == r['name'] or n.lstrip('_') == r['name'].lstrip('_')), None)
+            if ov is None:
+                ov = dict(name=r['name'], type=r.get('type', 0), rows=r.get('rows', 1), cols=r.get('cols', 4),
+                          isMatrix=r.get('isMatrix', 0), arraySize=r.get('arraySize', 0))
             if ov.get('struct'):
                 st = dict(ov['struct'], index=off)
                 cur['structs'].append(st)
@@ -173,7 +180,8 @@ def build_metal_params(refl, msl, P, cbname_map):
             off += size
             cur['size'] = off
         elif k == 'cbbind':
-            binds.append(dict(kind='cb', name=r['name'], index=r['index'], arraySize=1))
+            cb_name = cbname_map.get(r['name'], r['name'])
+            binds.append(dict(kind='cb', name=cb_name, index=r['index'], arraySize=1))
         elif k == 'tex':
             ot = next((t for t in P['tex'] if t['name'] == r['name']), None)
             if r['uav']:
@@ -196,6 +204,7 @@ def build_metal_params(refl, msl, P, cbname_map):
         s = next((x for x in P['samplers'] if x['bind'] == int(m.group(1))), None)
         if s is not None:
             binds.append(dict(kind='sampler', name='', bind=int(m.group(2)), sampler=s['sampler']))
+    cbs = [cb for cb in cbs if cb['name'] != '' or cb['params']]
     return cbs, binds
 
 def vertex_channels(refl):
@@ -259,7 +268,7 @@ def tt_params(cbs, binds, N):
             structs.append(dict(m_NameIndex=N(st['name']), m_Index=st['index'], m_ArraySize=st['arraySize'],
                                 m_StructSize=st['size'], m_VectorMembers=svec, m_MatrixMembers=smat))
         out['m_ConstantBuffers'].append(dict(m_NameIndex=N(cb['name']), m_MatrixParams=mat, m_VectorParams=vec,
-                                             m_StructParams=structs, m_Size=cb['size']))
+                                             m_StructParams=structs, m_Size=cb['size'], m_IsPartialCB=False))
     for b in binds:
         k = b['kind']
         if k == 'tex':
@@ -348,7 +357,9 @@ def convert_shader(tt, blob, workdir, log=print):
                         if INSTANCING_KW & set(sub['keywords'] + sub['localKw']):
                             plan[bi] = 'instancing'
                             continue
-                        P = merge_params(None, {}, dict(cbs=sub['cbs'], binds=sub['binds']))
+                        idx2name = {idx: n for n, idx in p['m_NameIndices']}
+                        cp = pr.get('m_CommonParameters')
+                        P = merge_params(cp, idx2name, dict(cbs=sub['cbs'], binds=sub['binds']))
                         code, _ = prep_dxbc(sub['code'], P)
                         batch.add(key, code)
                         plan[bi] = (key, P, sub, t in DX_VS)
@@ -374,7 +385,8 @@ def convert_shader(tt, blob, workdir, log=print):
             continue
         try:
             msl = fix_msl(msl, is_vs)
-            cbs, binds = build_metal_params(refl, msl, P, {'VGlobals': '$Globals'} if is_vs else {'FGlobals': '$Globals'})
+            cb_map = {'VGlobals': '$Globals', 'FGlobals': '$Globals', 'Globals': '$Globals'}
+            cbs, binds = build_metal_params(refl, msl, P, cb_map)
             smap, ch = vertex_channels(refl) if is_vs else (sub['sourceMap'], [])
             msub = dict(version=BLOB_VERSION, type=METAL_VS if is_vs else METAL_FS, stats=list(sub['stats']),
                         keywords=sub['keywords'], localKw=[], code=metal_code(msl, is_vs),
@@ -396,6 +408,7 @@ def convert_shader(tt, blob, workdir, log=print):
                 pr = p.get(prog)
                 if not pr or 'm_SubPrograms' not in pr: continue
                 out = []
+                last_params = None
                 for e in pr['m_SubPrograms']:
                     if e['m_GpuProgramType'] not in DX_VS | DX_PS:
                         continue
@@ -404,7 +417,9 @@ def convert_shader(tt, blob, workdir, log=print):
                         continue
                     mi, cbs, binds, ch, smap = r
                     ne = dict(e)
-                    ne.update(tt_params(cbs, binds, N))
+                    ttp = tt_params(cbs, binds, N)
+                    ne.update(ttp)
+                    last_params = ttp
                     ne['m_BlobIndex'] = mi
                     ne['m_GpuProgramType'] = METAL_VS if e['m_GpuProgramType'] in DX_VS else METAL_FS
                     ne['m_ShaderRequirements'] = 33
@@ -414,6 +429,8 @@ def convert_shader(tt, blob, workdir, log=print):
                         te['m_ShaderHardwareTier'] = tier
                         out.append(te)
                 pr['m_SubPrograms'] = out
+                if last_params is not None and 'm_CommonParameters' in pr:
+                    pr['m_CommonParameters'] = last_params
             p['m_NameIndices'] = N.pairs()
             if stats['instancing']:
                 p['m_HasInstancingVariant'] = False
