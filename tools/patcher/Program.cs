@@ -70,6 +70,7 @@ static class Program
                 n += RedirectFrameRate(ctx);
                 n += PatchSteamManager(ctx);
                 n += PatchRewiredTools(ctx);
+                n += PatchMultiplayer(ctx);
             }
             else if (asm.Name.Name == "Assembly-CSharp-firstpass")
             {
@@ -429,6 +430,106 @@ static class Program
         }
 
         return count;
+    }
+
+    static int PatchMultiplayer(Ctx c)
+    {
+        int patched = 0;
+
+        // 1. Funlabs.MultiplayerMng: ConnectTo -> use DotNetPlatform instead of PhotonPlatform
+        var mm = c.Mod.GetType("Funlabs.MultiplayerMng");
+        if (mm != null)
+        {
+            var connectTo = mm.Methods.FirstOrDefault(m => m.Name == "ConnectTo");
+            if (connectTo != null)
+            {
+                var il = connectTo.Body.GetILProcessor();
+                Instruction startInst = null;
+                Instruction setUdpInst = null;
+                foreach (var inst in connectTo.Body.Instructions)
+                {
+                    if (inst.OpCode == OpCodes.Call && inst.Operand.ToString().Contains("get_DefaultPhotonPlatformConfig"))
+                        startInst = inst;
+                    if (inst.OpCode == OpCodes.Call && inst.Operand.ToString().Contains("SetUdpPlatform"))
+                    {
+                        setUdpInst = inst;
+                        break;
+                    }
+                }
+
+                if (startInst != null && setUdpInst != null)
+                {
+                    var dotNetPlatformType = new TypeReference("UdpKit.Platform", "DotNetPlatform", c.Mod, new AssemblyNameReference("udpkit.platform.dotnet", new Version(0, 0, 0, 0)));
+                    var dotNetCtor = new MethodReference(".ctor", c.Mod.TypeSystem.Void, dotNetPlatformType) { HasThis = true };
+                    var dotNetCtorImported = c.Mod.ImportReference(dotNetCtor);
+
+                    var cur = startInst;
+                    while (cur != setUdpInst)
+                    {
+                        var next = cur.Next;
+                        il.Remove(cur);
+                        cur = next;
+                    }
+
+                    var newInst = il.Create(OpCodes.Newobj, dotNetCtorImported);
+                    il.Replace(setUdpInst, newInst);
+                    var callSet = il.Create(OpCodes.Call, setUdpInst.Operand as MethodReference);
+                    il.InsertAfter(newInst, callSet);
+                    patched++;
+                }
+            }
+
+            // 2. Funlabs.MultiplayerMng: BoltStartDone -> EnableLanBroadcast(5055)
+            var boltStartDone = mm.Methods.FirstOrDefault(m => m.Name == "BoltStartDone");
+            if (boltStartDone != null && boltStartDone.Body.Instructions.Count > 0)
+            {
+                var boltNetworkType = new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, new AssemblyNameReference("bolt", new Version(0, 0, 0, 0)));
+                var enableLan = new MethodReference("EnableLanBroadcast", c.Mod.TypeSystem.Void, boltNetworkType);
+                enableLan.Parameters.Add(new ParameterDefinition(c.Mod.TypeSystem.Int32));
+                var enableLanImported = c.Mod.ImportReference(enableLan);
+
+                var ilDone = boltStartDone.Body.GetILProcessor();
+                var first = boltStartDone.Body.Instructions[0];
+                ilDone.InsertBefore(first, ilDone.Create(OpCodes.Ldc_I4, 5055));
+                ilDone.InsertBefore(first, ilDone.Create(OpCodes.Call, enableLanImported));
+                patched++;
+            }
+
+            // 3. Funlabs.MultiplayerMng: BoltShutdownBegin -> DisableLanBroadcast()
+            var boltShutdown = mm.Methods.FirstOrDefault(m => m.Name == "BoltShutdownBegin");
+            if (boltShutdown != null && boltShutdown.Body.Instructions.Count > 0)
+            {
+                var boltNetworkType = new TypeReference("Photon.Bolt", "BoltNetwork", c.Mod, new AssemblyNameReference("bolt", new Version(0, 0, 0, 0)));
+                var disableLan = new MethodReference("DisableLanBroadcast", c.Mod.TypeSystem.Void, boltNetworkType);
+                var disableLanImported = c.Mod.ImportReference(disableLan);
+
+                var ilShut = boltShutdown.Body.GetILProcessor();
+                var firstShut = boltShutdown.Body.Instructions[0];
+                ilShut.InsertBefore(firstShut, ilShut.Create(OpCodes.Call, disableLanImported));
+                patched++;
+            }
+        }
+
+        // 4. MainMenuPresenter: CheckOnlineAvailable -> always invoke onAvailable
+        var mainPresenter = c.Mod.GetType("Beam.UI.MainMenuPresenter");
+        var checkOnline = mainPresenter?.Methods.FirstOrDefault(m => m.Name == "CheckOnlineAvailable");
+        if (checkOnline != null)
+        {
+            var ilCheck = checkOnline.Body.GetILProcessor();
+            checkOnline.Body.Instructions.Clear();
+            checkOnline.Body.Variables.Clear();
+            checkOnline.Body.ExceptionHandlers.Clear();
+            var retInst = ilCheck.Create(OpCodes.Ret);
+            ilCheck.Append(ilCheck.Create(OpCodes.Ldarg_1)); // onAvailable
+            ilCheck.Append(ilCheck.Create(OpCodes.Brfalse_S, retInst));
+            ilCheck.Append(ilCheck.Create(OpCodes.Ldarg_1));
+            var actionInvoke = c.Mod.ImportReference(typeof(Action).GetMethod("Invoke"));
+            ilCheck.Append(ilCheck.Create(OpCodes.Callvirt, actionInvoke));
+            ilCheck.Append(retInst);
+            patched++;
+        }
+
+        return patched;
     }
 
     static int PatchFilePath(Ctx c)

@@ -225,11 +225,52 @@ def declared_samplers(dx):
     return res
 
 
+DEFAULT_CB_NAMES = {0: 'Globals', 1: 'UnityPerDraw', 2: 'UnityPerFrame', 3: 'UnityPerCamera'}
+
+
+def declared_cbuffers(dx):
+    """Scan SHDR/SHEX for dcl_constantbuffer (opcode 89). Returns dict of {slot: size_in_float4s}."""
+    data = shader_tokens(dx)
+    toks = struct.unpack_from('<%dI' % (len(data) // 4), data, 0)
+    i = 2
+    cbs = {}
+    while i < len(toks):
+        t = toks[i]
+        op = t & 0x7ff
+        if op == 0x35:
+            ln = toks[i + 1]
+        else:
+            ln = (t >> 24) & 0x7f
+        if op == 89:
+            cbs[toks[i + 2]] = toks[i + 3]
+        if ln == 0:
+            break
+        i += ln
+    return cbs
+
+
 def prep_dxbc(code, P):
     i = code.find(b'DXBC')
     dx = code[i:]
     major, minor, ptype = dxbc_version(dx)
     tok = ({0: 0xFFFF, 1: 0xFFFE, 2: 0x4753, 3: 0x4853, 4: 0x4453, 5: 0x4353}[ptype] << 16) | (major << 8) | minor
+
+    # Inject synthetic declarations for any cbuffer declared in bytecode but missing from typetree reflection
+    bound_slots = {s: n for n, s in P['cbbind'].items()}
+    for slot, size in declared_cbuffers(dx).items():
+        if slot in bound_slots:
+            cn = bound_slots[slot]
+            if cn in P['cbs']:
+                P['cbs'][cn]['size'] = max(P['cbs'][cn]['size'], size * 16)
+                if not P['cbs'][cn]['vars']:
+                    P['cbs'][cn]['vars'].append(dict(name=f'_{cn}_data', type=0, rows=1, cols=4, isMatrix=0, arraySize=size, offset=0))
+        else:
+            cn = DEFAULT_CB_NAMES.get(slot, f'cb{slot}')
+            P['cbbind'][cn] = slot
+            P['cbs'][cn] = dict(size=size * 16, vars=[
+                dict(name=f'_{cn}_data', type=0, rows=1, cols=4, isMatrix=0, arraySize=size, offset=0)
+            ])
+
     rdef = build_rdef(P, major, minor, tok, samplers_used=declared_samplers(dx))
     chunks = [c for c in dxbc_chunks(dx) if c[0] != b'RDEF']
     return build_dxbc([(b'RDEF', rdef)] + chunks), ptype

@@ -318,7 +318,7 @@ def convert_shader(tt, blob, workdir, log=print):
             segs.append(pseg)
             pidx = len(segs) - 1
             segs.append(write_sub(msub))
-            results[key] = (len(segs) - 1, pidx)
+            results[key] = (len(segs) - 1, pidx, smap, ch)
             stats['ok'] += 1
         except Exception as ex:
             stats['fail'] += 1
@@ -341,9 +341,17 @@ def convert_shader(tt, blob, workdir, log=print):
                         r = results.get(key) if key else None
                         if r is None:
                             continue
+                        is_vs = e['m_GpuProgramType'] in DX_VS
                         ne = dict(e)
                         ne['m_BlobIndex'] = r[0]
-                        ne['m_GpuProgramType'] = METAL_VS if e['m_GpuProgramType'] in DX_VS else METAL_FS
+                        ne['m_GpuProgramType'] = METAL_VS if is_vs else METAL_FS
+                        if is_vs:
+                            ne['m_Channels'] = {
+                                'm_Channels': [{'source': s, 'target': t} for s, t in r[3]],
+                                'm_SourceMap': r[2]
+                            }
+                        else:
+                            ne['m_Channels'] = {'m_Channels': [], 'm_SourceMap': 0}
                         for tier in (0, 1, 2, 3):
                             te = dict(ne)
                             te['m_ShaderHardwareTier'] = tier
@@ -377,9 +385,9 @@ def convert_shader(tt, blob, workdir, log=print):
                     else:
                         pr['m_PlayerSubPrograms'] = [[] for _ in newsub] if newsub else []
                         pr['m_ParameterBlobIndices'] = [[] for _ in newpar] if newpar else []
-                cp = pr.get('m_CommonParameters', {})
-                for k in cp:
-                    cp[k] = []
+                    cp = pr.get('m_CommonParameters', {})
+                    for k in cp:
+                        cp[k] = []
             p['m_HasInstancingVariant'] = p['m_HasInstancingVariant']
     raw_chunks = pack_platform(segs)
     comp = [lz4.block.compress(c, store_size=False, mode='high_compression') for c in raw_chunks]
