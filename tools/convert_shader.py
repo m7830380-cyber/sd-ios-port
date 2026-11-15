@@ -76,6 +76,7 @@ def pack_platform(segs, chunk_limit=48 << 20):
             chunks.append(bytearray())
         ents.append((len(chunks[-1]), len(s), len(chunks) - 1))
         chunks[-1] += s
+    struct.pack_into('<i', chunks[0], 0, n)
     for k, (o, l, s) in enumerate(ents):
         struct.pack_into('<iii', chunks[0], 4 + 12 * k, o, l, s)
     return [bytes(c) for c in chunks]
@@ -319,6 +320,7 @@ class HlslccBatch:
 def convert_shader(tt, blob, workdir, log=print):
     if PLATFORM_D3D11 not in tt['platforms']:
         return None
+    blob = bytes(blob)
     pi = tt['platforms'].index(PLATFORM_D3D11)
     chunks = platform_chunks(tt, blob, pi)
     ents = entries_of(chunks)
