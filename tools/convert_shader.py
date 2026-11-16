@@ -268,7 +268,7 @@ def tt_params(cbs, binds, N):
             structs.append(dict(m_NameIndex=N(st['name']), m_Index=st['index'], m_ArraySize=st['arraySize'],
                                 m_StructSize=st['size'], m_VectorMembers=svec, m_MatrixMembers=smat))
         out['m_ConstantBuffers'].append(dict(m_NameIndex=N(cb['name']), m_MatrixParams=mat, m_VectorParams=vec,
-                                             m_StructParams=structs, m_Size=cb['size'], m_IsPartialCB=False))
+                                             m_StructParams=structs, m_Size=cb['size']))
     for b in binds:
         k = b['kind']
         if k == 'tex':
@@ -408,7 +408,6 @@ def convert_shader(tt, blob, workdir, log=print):
                 pr = p.get(prog)
                 if not pr or 'm_SubPrograms' not in pr: continue
                 out = []
-                last_params = None
                 for e in pr['m_SubPrograms']:
                     if e['m_GpuProgramType'] not in DX_VS | DX_PS:
                         continue
@@ -417,9 +416,7 @@ def convert_shader(tt, blob, workdir, log=print):
                         continue
                     mi, cbs, binds, ch, smap = r
                     ne = dict(e)
-                    ttp = tt_params(cbs, binds, N)
-                    ne.update(ttp)
-                    last_params = ttp
+                    ne.update(tt_params(cbs, binds, N))
                     ne['m_BlobIndex'] = mi
                     ne['m_GpuProgramType'] = METAL_VS if e['m_GpuProgramType'] in DX_VS else METAL_FS
                     ne['m_ShaderRequirements'] = 33
@@ -429,8 +426,6 @@ def convert_shader(tt, blob, workdir, log=print):
                         te['m_ShaderHardwareTier'] = tier
                         out.append(te)
                 pr['m_SubPrograms'] = out
-                if last_params is not None and 'm_CommonParameters' in pr:
-                    pr['m_CommonParameters'] = last_params
             p['m_NameIndices'] = N.pairs()
             if stats['instancing']:
                 p['m_HasInstancingVariant'] = False
