@@ -16,6 +16,7 @@ from concurrent.futures import ProcessPoolExecutor
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import UnityPy
 from convert_shader import convert_shader
+from convert_compute import convert_compute
 import transcode_tex as tex
 
 IOS_PLATFORM = 9
@@ -28,7 +29,7 @@ PLAYER_FILES = [
     'resources.assets'
 ]
 DEFAULT_GAME = r'C:\Stranded Deep'
-CONVERTER_VERSION = '8'
+CONVERTER_VERSION = '9'
 STREAMED = ('Texture2D', 'Cubemap', 'Texture2DArray', 'Texture3D', 'Mesh')
 CHUNK = 160
 
@@ -40,30 +41,38 @@ def log(*a):
 def convert_shaders(objects, cache_dir, work_dir, report):
     n = 0
     for obj in objects:
-        if obj.type.name != 'Shader':
+        kind = obj.type.name
+        if kind not in ('Shader', 'ComputeShader'):
             continue
         tt = obj.read_typetree()
-        blob = bytes(tt['compressedBlob'])
-        name = tt['m_ParsedForm']['m_Name']
-        h = hashlib.sha1((CONVERTER_VERSION + name).encode())
+        if kind == 'Shader':
+            blob = bytes(tt['compressedBlob'])
+            name = tt['m_ParsedForm']['m_Name']
+        else:
+            name = tt['m_Name']
+            blob = pickle.dumps(tt['variants'])
+        h = hashlib.sha1((CONVERTER_VERSION + kind + name).encode())
         h.update(blob)
         cp = os.path.join(cache_dir, h.hexdigest() + '.pkl')
         if os.path.exists(cp):
             nt, stats = pickle.load(open(cp, 'rb'))
         else:
-            tt['compressedBlob'] = b''
             msgs = []
             wd = os.path.join(work_dir, 'hlslcc', h.hexdigest())
-            res = convert_shader(tt, blob, wd, log=msgs.append)
+            if kind == 'Shader':
+                tt['compressedBlob'] = b''
+                res = convert_shader(tt, blob, wd, log=msgs.append)
+            else:
+                res = convert_compute(tt, wd, log=msgs.append)
             shutil.rmtree(wd, ignore_errors=True)
             if res is None:
-                report.setdefault('shader_no_dx11', []).append(name)
+                report.setdefault('compute_no_dx11' if kind == 'ComputeShader' else 'shader_no_dx11', []).append(name)
                 continue
             nt, stats = res
             stats = dict(stats, msgs=msgs[:20])
             pickle.dump((nt, stats), open(cp, 'wb'))
         if stats.get('fail'):
-            report.setdefault('shader_failures', {})[name] = stats.get('msgs', [])
+            report.setdefault('compute_failures' if kind == 'ComputeShader' else 'shader_failures', {})[name] = stats.get('msgs', [])
         obj.save_typetree(nt)
         n += 1
     return n
