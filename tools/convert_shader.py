@@ -200,7 +200,7 @@ def build_metal_params(refl, msl, P, cbname_map):
             else:
                 ob = next((b for b in P['buf'] if b['name'] == r['name']), None)
                 binds.append(dict(kind='buf', name=r['name'], index=r['index'], arraySize=ob['arraySize'] if ob else 0))
-    for m in re.finditer(rb'sampler sampler_inline(\d+) \[\[ sampler \((\d+)\) \]\]', msl):
+    for m in re.finditer(rb'sampler sampler_inline(\d+)\s*\[\[\s*sampler\s*\(\s*(\d+)\s*\)\s*\]\]', msl):
         s = next((x for x in P['samplers'] if x['bind'] == int(m.group(1))), None)
         if s is not None:
             binds.append(dict(kind='sampler', name='', bind=int(m.group(2)), sampler=s['sampler']))
@@ -221,6 +221,40 @@ def vertex_channels(refl):
         ch.append((src, 13 + r['index']))
         smap |= 1 << src
     return smap, ch
+
+# Unity inline sampler flags (sampler_LinearClamp etc.): filter in bits 0-1, wrap U/V/W in bits 2-7.
+INLINE_FILTER = {0: b'filter::nearest, mip_filter::nearest', 1: b'filter::linear, mip_filter::nearest',
+                 2: b'filter::linear, mip_filter::linear'}
+INLINE_SEEN = {}   # flags -> count, reported by convert_data
+INLINE_WRAP = {0: b'repeat', 1: b'clamp_to_edge', 2: b'mirrored_repeat', 3: b'mirrored_repeat'}
+
+def inline_samplers(msl, P):
+    """Bake HLSL inline samplers into the MSL as constexpr samplers, like Unity's own Metal compiler.
+    Unity's Metal runtime does not set up sampler states for a bound slot with no texture behind it,
+    so a bound inline sampler falls back to repeat wrapping (curves sampled at 1.0 wrap to 0)."""
+    pat = re.compile(rb'(,?)\s*\n\s*sampler sampler_inline(\d+)\s*\[\[\s*sampler\s*\(\s*(\d+)\s*\)\s*\]\]\s*(,?)')
+    decls = []
+
+    def sub(m):
+        s = next((x for x in P['samplers'] if x['bind'] == int(m.group(2))), None)
+        flags = s['sampler'] if s else None
+        INLINE_SEEN[flags] = INLINE_SEEN.get(flags, 0) + 1
+        if flags is None or flags >> 8 or (flags & 3) not in INLINE_FILTER:
+            return m.group(0)   # unknown (e.g. comparison sampler): leave it bound
+        w = [INLINE_WRAP[(flags >> sh) & 3] for sh in (2, 4, 6)]
+        decl = (b'constexpr sampler sampler_inline%s(%s, s_address::%s, t_address::%s, r_address::%s);\n'
+                % (m.group(2), INLINE_FILTER[flags & 3], w[0], w[1], w[2]))
+        if decl not in decls:
+            decls.append(decl)
+        return b',' if m.group(1) and m.group(4) else b''
+
+    out = pat.sub(sub, msl)
+    if not decls:
+        return msl
+    at = re.search(rb'\n(vertex|fragment|kernel) ', out)
+    if at:
+        return out[:at.start() + 1] + b''.join(decls) + out[at.start() + 1:]
+    return b''.join(decls) + out
 
 def fix_msl(msl, is_vs):
     if is_vs:
@@ -385,7 +419,7 @@ def convert_shader(tt, blob, workdir, log=print):
             log(f'  [{name}] hlslcc failed for blob {bi}')
             continue
         try:
-            msl = fix_msl(msl, is_vs)
+            msl = inline_samplers(fix_msl(msl, is_vs), P)
             cb_map = {'VGlobals': '$Globals', 'FGlobals': '$Globals', 'Globals': '$Globals'}
             cbs, binds = build_metal_params(refl, msl, P, cb_map)
             smap, ch = vertex_channels(refl) if is_vs else (0, [])
