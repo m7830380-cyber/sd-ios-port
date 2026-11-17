@@ -204,7 +204,8 @@ def build_metal_params(refl, msl, P, cbname_map):
         s = next((x for x in P['samplers'] if x['bind'] == int(m.group(1))), None)
         if s is not None:
             binds.append(dict(kind='sampler', name='', bind=int(m.group(2)), sampler=s['sampler']))
-    cbs = [cb for cb in cbs if cb['name'] != '' or cb['params']]
+    # CB 0 is always the dummy unnamed/globals buffer (required by UnityFramework's blob deserializer)
+    cbs = [cbs[0]] + [cb for cb in cbs[1:] if cb['name'] != '' and (cb['params'] or cb['size'] > 0)]
     return cbs, binds
 
 def vertex_channels(refl):
@@ -268,7 +269,7 @@ def tt_params(cbs, binds, N):
             structs.append(dict(m_NameIndex=N(st['name']), m_Index=st['index'], m_ArraySize=st['arraySize'],
                                 m_StructSize=st['size'], m_VectorMembers=svec, m_MatrixMembers=smat))
         out['m_ConstantBuffers'].append(dict(m_NameIndex=N(cb['name']), m_MatrixParams=mat, m_VectorParams=vec,
-                                             m_StructParams=structs, m_Size=cb['size']))
+                                             m_StructParams=structs, m_Size=cb['size'], m_IsPartialCB=True))
     for b in binds:
         k = b['kind']
         if k == 'tex':
@@ -387,7 +388,7 @@ def convert_shader(tt, blob, workdir, log=print):
             msl = fix_msl(msl, is_vs)
             cb_map = {'VGlobals': '$Globals', 'FGlobals': '$Globals', 'Globals': '$Globals'}
             cbs, binds = build_metal_params(refl, msl, P, cb_map)
-            smap, ch = vertex_channels(refl) if is_vs else (sub['sourceMap'], [])
+            smap, ch = vertex_channels(refl) if is_vs else (0, [])
             msub = dict(version=BLOB_VERSION, type=METAL_VS if is_vs else METAL_FS, stats=list(sub['stats']),
                         keywords=sub['keywords'], localKw=[], code=metal_code(msl, is_vs),
                         sourceMap=smap, channels=ch, cbs=cbs, binds=binds, tail=b'')
@@ -416,10 +417,10 @@ def convert_shader(tt, blob, workdir, log=print):
                         continue
                     mi, cbs, binds, ch, smap = r
                     ne = dict(e)
-                    ne.update(tt_params(cbs, binds, N))
+                    ne['m_Parameters'] = tt_params(cbs, binds, N)
                     ne['m_BlobIndex'] = mi
                     ne['m_GpuProgramType'] = METAL_VS if e['m_GpuProgramType'] in DX_VS else METAL_FS
-                    ne['m_ShaderRequirements'] = 33
+                    ne['m_ShaderRequirements'] = 1
                     ne['m_Channels'] = dict(m_Channels=[dict(source=s, target=t) for s, t in ch], m_SourceMap=smap)
                     for tier in METAL_TIERS:
                         te = dict(ne)

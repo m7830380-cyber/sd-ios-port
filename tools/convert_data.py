@@ -28,7 +28,7 @@ PLAYER_FILES = [
     'resources.assets'
 ]
 DEFAULT_GAME = r'C:\Stranded Deep'
-CONVERTER_VERSION = '5'
+CONVERTER_VERSION = '7'
 STREAMED = ('Texture2D', 'Cubemap', 'Texture2DArray', 'Texture3D', 'Mesh')
 CHUNK = 160
 
