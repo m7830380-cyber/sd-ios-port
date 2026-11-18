@@ -1,0 +1,49 @@
+name: Check converted Metal shaders
+
+# Compiles every translated Metal source with Apple's compiler, the way the player compiles them on the
+# phone at load time. The sources are game-derived: tools/extract_msl.py --upload puts them on the
+# `msl-check` release of the PRIVATE repo, and the failure report goes back there. This log shows counts only.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRIVATE_REPO: m7830380-cyber/sd-ios-private
+
+jobs:
+  compile:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Fetch sources (private repo)
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: |
+          gh release download msl-check --repo "$PRIVATE_REPO" -p msl.tar.gz
+          tar xzf msl.tar.gz
+      - name: Compile
+        run: |
+          set -u
+          find msl -name '*.metal' > files.txt
+          echo "sources: $(wc -l < files.txt)"
+          cat > one.sh <<'SH'
+          f="$1"
+          xcrun -sdk iphoneos metal -std=ios-metal2.3 -mios-version-min=14.0 -c "$f" -o /dev/null 2> "$f.err" || echo "$f" >> failed.txt
+          SH
+          xargs -P "$(sysctl -n hw.ncpu)" -L 1 sh one.sh < files.txt
+          touch failed.txt
+          echo "failed: $(wc -l < failed.txt)"
+          # error kinds only (no source text)
+          cat $(sed 's/$/.err/' failed.txt) 2>/dev/null | grep -o 'error: [^'"'"'"]*' | sort | uniq -c | sort -rn | head -n 30 || true
+          mkdir -p report && cp failed.txt report/
+          while read -r f; do d="report/$(dirname "$f")"; mkdir -p "$d"; cp "$f" "$f.err" "$d/"; done < failed.txt
+          tar czf msl-report.tar.gz report
+      - name: Upload report (private repo)
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+        run: gh release upload msl-check msl-report.tar.gz --clobber --repo "$PRIVATE_REPO"
+      - name: Fail on errors
+        run: test ! -s failed.txt

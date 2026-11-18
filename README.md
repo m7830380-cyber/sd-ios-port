@@ -17,5 +17,11 @@ It does not rebuild the game: the game's own assemblies are patched and AOT-comp
 * `tools/build_plugins.py` – builds shim + mod and runs the patcher into `../sd-ios-private/Plugins`.
 * `tools/convert_data.py`, `convert_shader.py`, `dx2metal.py`, `transcode_tex.py` – convert the Windows data for iOS (DX11 → Metal shaders via fixed HLSLcc CLI, BC/DXT → ASTC textures, iOS platform tag).
 * `tools/package_ipa.py` – merges the CI shell IPA with the converted data into the final `StrandedDeep.ipa`.
+* `tools/verify_shaders.py` – static check of converted shaders: parses every generated MSL program and compares its
+  cbuffer struct layouts, buffer/texture/sampler slots and vertex attributes with the parameter tables Unity reads,
+  and checks that a named cbuffer has one layout in every program. Unity's own Metal shaders from the shell pass it
+  with 0 issues (`python tools/verify_shaders.py <shell>/Data/Resources/unity_builtin_extra`).
+* `tools/extract_msl.py --upload` + `.github/workflows/check-msl.yml` – compiles every generated Metal source with
+  Apple's compiler on the macOS runner (sources and report stay in the private repo's `msl-check` release).
 
 Logs: `Documents/SD-iOS.log` (previous run `SD-iOS-prev.log`); native crash log: `Documents/SD-iOS-native.log`.

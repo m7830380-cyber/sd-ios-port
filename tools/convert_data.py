@@ -15,7 +15,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import UnityPy
-from convert_shader import convert_shader
+from convert_shader import convert_shader, cb_unions, merge_union, finish_layouts
 from convert_compute import convert_compute
 import transcode_tex as tex
 
@@ -29,7 +29,7 @@ PLAYER_FILES = [
     'resources.assets'
 ]
 DEFAULT_GAME = r'C:\Stranded Deep'
-CONVERTER_VERSION = '9'
+CONVERTER_VERSION = '10'
 STREAMED = ('Texture2D', 'Cubemap', 'Texture2DArray', 'Texture3D', 'Mesh')
 CHUNK = 160
 
@@ -38,7 +38,31 @@ def log(*a):
     print(time.strftime('%H:%M:%S'), *a, flush=True)
 
 
-def convert_shaders(objects, cache_dir, work_dir, report):
+def collect_layouts(paths):
+    """Union of every named cbuffer over all DX11 shaders of the game (player files + bundles), so each
+    converted program declares the same complete struct, like Unity's own Metal shaders do."""
+    union, bad, seen = {}, set(), set()
+    for path in paths:
+        for obj in UnityPy.load(path).objects:
+            if obj.type.name != 'Shader':
+                continue
+            tt = obj.read_typetree()
+            blob = bytes(tt['compressedBlob'])
+            key = hashlib.sha1(blob).digest()
+            if key in seen:
+                continue
+            seen.add(key)
+            u, b = cb_unions(tt, blob)
+            bad |= b
+            for cn, x in u.items():
+                merge_union(union, bad, cn, x['size'], x['vars'])
+    layouts = finish_layouts(union, bad)
+    log('cbuffer layouts: %d shared (%s), per shader: %s' % (len(layouts), ', '.join(sorted(layouts)), ', '.join(sorted(bad)) or '-'))
+    return layouts, hashlib.sha1(pickle.dumps(sorted((k, [(v['name'], v['offset']) for v in x['vars']]) for k, x in layouts.items()))).hexdigest()
+
+
+def convert_shaders(objects, cache_dir, work_dir, report, layouts):
+    layouts, layouts_hash = layouts
     n = 0
     for obj in objects:
         kind = obj.type.name
@@ -51,7 +75,7 @@ def convert_shaders(objects, cache_dir, work_dir, report):
         else:
             name = tt['m_Name']
             blob = pickle.dumps(tt['variants'])
-        h = hashlib.sha1((CONVERTER_VERSION + kind + name).encode())
+        h = hashlib.sha1((CONVERTER_VERSION + layouts_hash + kind + name).encode())
         h.update(blob)
         cp = os.path.join(cache_dir, h.hexdigest() + '.pkl')
         if os.path.exists(cp):
@@ -61,7 +85,7 @@ def convert_shaders(objects, cache_dir, work_dir, report):
             wd = os.path.join(work_dir, 'hlslcc', h.hexdigest())
             if kind == 'Shader':
                 tt['compressedBlob'] = b''
-                res = convert_shader(tt, blob, wd, log=msgs.append)
+                res = convert_shader(tt, blob, wd, log=msgs.append, global_layouts=layouts)
             else:
                 res = convert_compute(tt, wd, log=msgs.append)
             shutil.rmtree(wd, ignore_errors=True)
@@ -125,7 +149,7 @@ def stamp(sf):
     sf.version = TARGET_UNITY
 
 
-def process_player_file(src, dst, cache_dir, work_dir, pool):
+def process_player_file(src, dst, cache_dir, work_dir, pool, layouts):
     report = {}
     env = UnityPy.load(src)
     sf = env.file
@@ -150,7 +174,7 @@ def process_player_file(src, dst, cache_dir, work_dir, pool):
             if sd.get('size', 0) > 0:
                 mesh_objs.append((obj, tt))
 
-    n_sh = convert_shaders(sf.objects.values(), cache_dir, work_dir, report)
+    n_sh = convert_shaders(sf.objects.values(), cache_dir, work_dir, report, layouts)
     if n_sh:
         report['shaders'] = n_sh
 
@@ -238,14 +262,16 @@ def process_player_file(src, dst, cache_dir, work_dir, pool):
     return report
 
 
-def process_bundle(src, dst, cache_dir, work_dir, pool):
+def process_bundle(src, dst, cache_dir, work_dir, pool, layouts):
     report = {}
     env = UnityPy.load(src)
     bf = env.file
     for sf in bf.files.values():
         if not hasattr(sf, 'objects'):
             continue
-        convert_shaders(sf.objects.values(), cache_dir, work_dir, report)
+        n = convert_shaders(sf.objects.values(), cache_dir, work_dir, report, layouts)
+        if n:
+            report['shaders'] = report.get('shaders', 0) + n
         inline = [o for o in sf.objects.values() if o.type.name in tex.TEXTURE_CLASSES]
         for obj in inline:
             tt = obj.read_typetree()
@@ -267,7 +293,20 @@ def process_bundle(src, dst, cache_dir, work_dir, pool):
     return report
 
 
-def convert_asset_bundles(game_dir, out_data, cache_dir, work_dir, pool, full_report):
+def is_bundle(path):
+    with open(path, 'rb') as f:
+        return f.read(8) == b'UnityFS\x00'
+
+
+def bundle_files(game_dir):
+    bundles_dir = os.path.join(game_dir, 'Stranded_Deep_Data', 'Data', 'Bundles')
+    out = []
+    for root, _, files in os.walk(bundles_dir):
+        out += [os.path.join(root, f) for f in files if is_bundle(os.path.join(root, f))]
+    return out
+
+
+def convert_asset_bundles(game_dir, out_data, cache_dir, work_dir, pool, full_report, layouts):
     bundles_dir = os.path.join(game_dir, 'Stranded_Deep_Data', 'Data', 'Bundles')
     out_bundles = os.path.join(out_data, 'Bundles')
     if not os.path.exists(bundles_dir):
@@ -279,14 +318,18 @@ def convert_asset_bundles(game_dir, out_data, cache_dir, work_dir, pool, full_re
             rel = os.path.relpath(src, bundles_dir)
             dst = os.path.join(out_bundles, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            if f.endswith(('.unity3d', '')):
+            if is_bundle(src):
+                # Never ship a bundle unconverted: its DX11 shaders / BC textures would not work on iOS.
                 try:
-                    full_report[rel] = process_bundle(src, dst, cache_dir, work_dir, pool)
-                    log('done bundle', rel)
+                    full_report[rel] = process_bundle(src, dst, cache_dir, work_dir, pool, layouts)
+                    log('done bundle', rel, {k: (v if not isinstance(v, (list, dict)) else len(v)) for k, v in full_report[rel].items()})
                 except Exception:
-                    shutil.copyfile(src, dst)
+                    full_report[rel] = {'error': traceback.format_exc()}
+                    log('FAILED bundle', rel)
+                    if os.path.exists(dst):
+                        os.remove(dst)
             else:
-                shutil.copyfile(src, dst)
+                shutil.copyfile(src, dst)   # text .manifest files
 
     # Copy Default Maps
     maps_dir = os.path.join(game_dir, 'Stranded_Deep_Data', 'Data', 'Default Maps')
@@ -316,19 +359,20 @@ def main():
     files.sort(key=lambda f: -os.path.getsize(os.path.join(data, f)))
     full_report = {}
     t0 = time.time()
+    layouts = collect_layouts([os.path.join(data, f) for f in PLAYER_FILES] + bundle_files(a.game))
     with ProcessPoolExecutor(max_workers=a.jobs) as pool:
         for f in files:
             src = os.path.join(data, f)
             log('converting', f)
             try:
-                full_report[f] = process_player_file(src, os.path.join(out_data, f), cache_dir, work_dir, pool)
+                full_report[f] = process_player_file(src, os.path.join(out_data, f), cache_dir, work_dir, pool, layouts)
             except Exception:
                 full_report[f] = {'error': traceback.format_exc()}
             r = full_report[f]
             log('done', f, {k: (v if not isinstance(v, (list, dict)) else len(v)) for k, v in r.items()})
 
         if not a.only or 'bundle' in a.only:
-            convert_asset_bundles(a.game, out_data, cache_dir, work_dir, pool, full_report)
+            convert_asset_bundles(a.game, out_data, cache_dir, work_dir, pool, full_report, layouts)
 
     json.dump(full_report, open(os.path.join(a.out, 'convert_report.json'), 'w'), indent=1, default=str)
     errors = sum(len(r.get('texture_errors', [])) + ('error' in r) + len(r.get('mesh_repoint_failed', [])) for r in full_report.values())
