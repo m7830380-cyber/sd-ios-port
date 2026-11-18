@@ -37,7 +37,7 @@ def main():
                 if h in seen:
                     continue
                 seen.add(h)
-                ti = tarfile.TarInfo('msl/%s/%d_%s.metal' % (name, k, 'vs' if s['type'] == C.METAL_VS else 'fs'))
+                ti = tarfile.TarInfo('msl/%s/%d_%s_%s.metal' % (name, k, 'vs' if s['type'] == C.METAL_VS else 'fs', h[:10]))
                 ti.size = len(src)
                 tar.addfile(ti, io.BytesIO(src))
     print('unique sources', len(seen), '->', out)
