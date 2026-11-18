@@ -6,6 +6,10 @@ name: Check converted Metal shaders
 
 on:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: macOS runner image (macos-15-intel if the arm64 pool is out of capacity)
+        default: macos-15
 
 permissions:
   contents: read
@@ -15,7 +19,7 @@ env:
 
 jobs:
   compile:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 120
     steps:
       - name: Fetch sources (private repo)
