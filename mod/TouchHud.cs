@@ -47,6 +47,24 @@ namespace SdIOS
 
         // Menu touch state
         int m_MenuFinger = -1;
+        bool m_WasInMenu;
+
+        void ReleaseAll()
+        {
+            foreach (var b in m_Buttons)
+            {
+                if (b.Held) ReleaseButton(b);
+                b.Held = false;
+                b.FingerId = -1;
+            }
+            m_StickFinger = -1;
+            m_LookFinger = -1;
+            m_StickEdgeTimer = 0f;
+            VirtualInput.MoveStick = Vector2.zero;
+            VInput.SetKey(KeyCode.LeftShift, false);
+            if (m_MenuFinger >= 0) VInput.SetMouseButton(0, false);
+            m_MenuFinger = -1;
+        }
 
         Texture2D m_CircleTex;
         Texture2D m_RingTex;
@@ -155,6 +173,11 @@ namespace SdIOS
             }
 
             bool inMenu = (IosCursor.LockState == CursorLockMode.None) || IosCursor.Visible;
+            if (inMenu != m_WasInMenu)
+            {
+                ReleaseAll();   // a finger held across a menu switch must not keep walking / holding a button
+                m_WasInMenu = inMenu;
+            }
 
             if (inMenu)
             {
@@ -206,8 +229,10 @@ namespace SdIOS
                 }
                 if (handledByButton) continue;
 
-                // 2. Check Joystick on Left Half of screen
-                if (t.position.x < w * 0.5f)
+                // 2. Joystick: a finger that started on the left half stays the stick finger wherever it moves
+                //    (and the look finger stays the look finger), so dragging across the middle never turns the camera.
+                bool stickSide = t.fingerId == m_StickFinger || (t.fingerId != m_LookFinger && t.position.x < w * 0.5f);
+                if (stickSide)
                 {
                     if (t.phase == TouchPhase.Began && m_StickFinger < 0)
                     {
@@ -289,12 +314,10 @@ namespace SdIOS
                 Touch t = Input.GetTouch(i);
                 Vector2 p = t.position;
 
+                // A tap is only a click at the finger. (Pulsing Return/Space here submitted whatever menu item was
+                // selected before the click landed: the "pre-tap".)
                 if (t.phase == TouchPhase.Began)
                 {
-                    VInput.TapKey(KeyCode.Return, 3);
-                    VInput.TapKey(KeyCode.Space, 3);
-                    VInput.TapKey(KeyCode.KeypadEnter, 3);
-
                     if (m_MenuFinger < 0)
                     {
                         m_MenuFinger = t.fingerId;

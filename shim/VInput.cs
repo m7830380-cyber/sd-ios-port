@@ -153,9 +153,20 @@ namespace SdShim
                     if (VKey((int)KeyCode.W) || VKey((int)KeyCode.UpArrow)) return 1f;
                     if (VKey((int)KeyCode.S) || VKey((int)KeyCode.DownArrow)) return -1f;
                     break;
+                // Every mouse-type axis of the game's InputManager (sensitivity as defined there). Rewired reads
+                // MouseAxis1-3; these must never fall through to the real Input, whose mouse axes follow touches.
+                case "Mouse X": case "Mouse Horizontal": return mouseDeltaThisFrame.x * 0.1f;
+                case "Mouse Y": case "Mouse Vertical": return mouseDeltaThisFrame.y * 0.1f;
                 case "Mouse ScrollWheel": return scrollThisFrame.y * 0.1f;
-                case "Mouse X": return mouseDeltaThisFrame.x * 0.1f;
-                case "Mouse Y": return mouseDeltaThisFrame.y * 0.1f;
+                case "Mouse Wheel": case "MouseAxis3": return scrollThisFrame.y;
+                case "MouseAxis1": return mouseDeltaThisFrame.x;
+                case "MouseAxis2": return mouseDeltaThisFrame.y;
+            }
+            if (axis.StartsWith("MouseAxis", StringComparison.Ordinal)) return 0f;
+            if (axis.StartsWith("MouseButton", StringComparison.Ordinal))
+            {
+                int b;
+                return int.TryParse(axis.Substring(11), out b) && b >= 0 && b < 3 && mouseCur[b] ? 1f : 0f;
             }
             return SafeAxis(axis, false);
         }
